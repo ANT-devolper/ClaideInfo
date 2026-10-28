@@ -30,10 +30,11 @@ struct Stats {
 }
 
 fn main() {
-    let home = match env::var("HOME") {
+    // Native Windows usually has no HOME, only USERPROFILE.
+    let home = match env::var("HOME").or_else(|_| env::var("USERPROFILE")) {
         Ok(h) => h,
         Err(_) => {
-            eprintln!("Error: HOME environment variable is not set.");
+            eprintln!("Error: neither HOME nor USERPROFILE environment variable is set.");
             std::process::exit(1);
         }
     };
@@ -193,10 +194,9 @@ fn usage_total(usage: &Value) -> u64 {
         + g("cache_creation_input_tokens")
 }
 
-/// Basename of a path (last non-empty segment).
+/// Basename of a path (last non-empty segment, `/` or `\` separated).
 fn basename(path: &str) -> Option<String> {
-    path.trim_end_matches('/')
-        .rsplit('/')
+    path.rsplit(['/', '\\'])
         .find(|s| !s.is_empty())
         .map(|s| s.to_string())
 }
@@ -321,5 +321,29 @@ fn print_report(by_project: &HashMap<String, Stats>) {
             wt = w_time,
             wk = w_tok
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basename_unix_path() {
+        assert_eq!(basename("/home/x/my-app").as_deref(), Some("my-app"));
+    }
+
+    #[test]
+    fn basename_windows_path() {
+        assert_eq!(
+            basename(r"C:\Users\x\projects\gestao-qualidade").as_deref(),
+            Some("gestao-qualidade")
+        );
+    }
+
+    #[test]
+    fn basename_trailing_separator() {
+        assert_eq!(basename("/home/x/app/").as_deref(), Some("app"));
+        assert_eq!(basename(r"C:\x\app\").as_deref(), Some("app"));
     }
 }
